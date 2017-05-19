@@ -7,7 +7,15 @@
 from tkinter import *
 import pymssql
 
-class Application(Frame):
+
+def change_frame(frame):
+
+	inicio.destroy()
+	carga = Carga(root)
+	carga.tkraise()
+
+
+class Inicio(Frame):
 
 	def __init__(self, master):
 		""" Inicialización del contenedor gráfico principal """
@@ -59,6 +67,8 @@ class Application(Frame):
 		USUARIO = self.usuario.get()
 		PASSWORD = self.password.get()
 
+		conn = None
+
 		if HOST and PUERTO and USUARIO and PASSWORD:
 			try:
 				conn = pymssql.connect(HOST, USUARIO, PASSWORD, 'Matcher')
@@ -79,11 +89,34 @@ class Application(Frame):
 		self.text.grid(row=7, column=2, sticky='N')
 		self.text.insert(INSERT, message)
 
+		if conn:
 
+			self.submit_button1 = Button(self, text = "Continuar", command=lambda:change_frame(Carga))
+			self.submit_button1.grid(row=8, column=0, sticky = 'EW')
+
+
+class Carga(Frame):
+
+	def __init__(self, master):
+		""" Inicialización del contenedor gráfico principal """
+		Frame.__init__(self, master)
+		self.grid(padx=20, pady=20)
+		self.crear_widgets()
+
+	def crear_widgets(self):
+		"""crear boton, text y entrada"""
+		self.instruction1 = Label(self,text="Seleccione el archivo de carga: ")
+		self.instruction1.grid(row = 0, column = 0, columnspan = 1, sticky = 'E')
+
+		self.file = Entry(self)
+		self.file.grid(row = 0, column = 2, sticky=W)
 
 root = Tk()
 root.title('Visor')
 root.geometry('350x300')
-app = Application(root)
+
+inicio = Inicio(root)
+
+#raise_frame(inicio)
 
 root.mainloop()
