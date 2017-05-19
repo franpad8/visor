@@ -8,10 +8,9 @@ from tkinter import *
 import pymssql
 
 
-def change_frame(frame):
+def change_frame(newframe):
 
-	inicio.destroy()
-	carga = Carga(root)
+	carga = newframe(root)
 	carga.tkraise()
 
 
@@ -20,43 +19,64 @@ class Inicio(Frame):
 	def __init__(self, master):
 		""" Inicialización del contenedor gráfico principal """
 		Frame.__init__(self, master)
-		self.grid(padx=20, pady=20)
+		self.pack(fill=BOTH, expand=True)
 		self.crear_widgets()
 
 	def crear_widgets(self):
 		"""crear boton, text y entrada"""
-		self.instruction1 = Label(self,text="Host: ")
-		self.instruction1.grid(row = 0, column = 0, columnspan = 1, sticky = 'E')
 
-		self.host = Entry(self)
-		self.host.grid(row = 0, column = 2, sticky=W)
+		self.frame1 = Frame(self, bd=1, relief=SUNKEN)
+		self.frame1.pack(fill=X)
 
-		self.instruction2 = Label(self,text="Puerto: ")
-		self.instruction2.grid(row=1, column = 0, columnspan = 1, sticky = 'E')
 
-		self.puerto = Entry(self)
-		self.puerto.grid(row = 1, column = 2, sticky=W)
+		self.instruction1 = Label(self.frame1, text="Host: ", width=8, anchor=E)
+		self.instruction1.pack(side=LEFT, padx=5, pady=5)
 
-		self.instruction3 = Label(self,text="Usuario: ")
-		self.instruction3.grid(row=2, column = 0, columnspan = 1, sticky ='E')
+		self.host = Entry(self.frame1)
+		self.host.pack(fill=X, expand=True, padx=(0, 5))
 
-		self.usuario = Entry(self)
-		self.usuario.grid(row = 2, column = 2, sticky=W)
+		self.frame2 = Frame(self,bd=1, relief=SUNKEN)
+		self.frame2.pack(fill=X)
 
-		self.instruction4 = Label(self,text="Password: ")
-		self.instruction4.grid(row=3, column = 0, columnspan = 1, sticky = 'E')
+		self.instruction2 = Label(self.frame2,text="Puerto: ", width=8, anchor=E)
+		self.instruction2.pack(side=LEFT, padx=5, pady=5)
 
-		self.password = Entry(self, show="*")
-		self.password.grid(row = 3, column = 2, sticky=W)
+		self.puerto = Entry(self.frame2, width=5)
+		self.puerto.pack(side=LEFT, padx=(0, 5))
 
-		self.vacio1 = Label(self,text="")
-		self.vacio1.grid(row=4, column = 0, columnspan = 2, sticky = W)
+		self.frame3 = Frame(self,bd=1, relief=SUNKEN)
+		self.frame3.pack(fill=X)
 
-		self.submit_button = Button(self, text = "Prueba", command = self.probar_conexion)
-		self.submit_button.grid(row=5, column=0, sticky = 'EW')
+		self.instruction3 = Label(self.frame3,text="Usuario: ", width=8, anchor=E)
+		self.instruction3.pack(side=LEFT, padx=5, pady=5)
 
-		self.vacio = Label(self,text="")
-		self.vacio.grid(row=6, column = 0, columnspan = 2, sticky = W)
+		self.usuario = Entry(self.frame3)
+		self.usuario.pack(fill=X, expand=True, padx=(0, 5))
+
+		self.frame4 = Frame(self,bd=1, relief=SUNKEN)
+		self.frame4.pack(fill=X)
+
+		self.instruction4 = Label(self.frame4,text="Password: ", width=8, anchor=E)
+		self.instruction4.pack(side=LEFT, padx=5, pady=5)
+
+		self.password = Entry(self.frame4, show="*")
+		self.password.pack(fill=X, expand=True, padx=(0, 5))
+
+		self.frame5 = Frame(self)
+		self.frame5.pack(fill=X)
+
+		self.submit_button = Button(self.frame5, text='Probar Conexión', command=self.probar_conexion)
+		self.submit_button.pack(side=LEFT, padx=5, pady=(10, 5))
+
+		self.frame6 = Frame(self)
+		self.frame6.pack(fill=X)
+
+		self.text = Text(self.frame6, height = 4, wrap = WORD)
+		self.text.pack(fill=X, padx=5, pady=5)
+
+		self.submit_button1 = Button(self.frame6, text = "Continuar", state=NORMAL, command=lambda:(self.destroy(), change_frame(Carga)))
+		self.submit_button1.pack(side=RIGHT, padx=5)
+
 
 
 
@@ -72,27 +92,32 @@ class Inicio(Frame):
 		if HOST and PUERTO and USUARIO and PASSWORD:
 			try:
 				conn = pymssql.connect(HOST, USUARIO, PASSWORD, 'Matcher')
-				message = "Conexión establecida"
+				message = "Conexión establecida."
 				COLOR = 'green'
+				self.submit_button1.config(state=NORMAL)
+
 			except pymssql.InterfaceError as eie:
 				message = "Conexión fallida - " + str(eie)
 				COLOR = 'red'
+				self.submit_button1.config(state=DISABLED)
+
 			except pymssql.OperationalError as eoe:
 				message = "Login Fallido - " + str(eoe)
 				COLOR = 'red'
+				self.submit_button1.config(state=DISABLED)
 		else:
-			message = 'Debe llenar todos los campos'
+			message = 'Debe llenar todos los campos.'
 			COLOR = 'red'
+			self.submit_button1.config(state=DISABLED)
 
-
-		self.text = Text(self, width=25, height = 4, wrap = WORD, fg=COLOR)
-		self.text.grid(row=7, column=2, sticky='N')
+		
+		self.text.delete(1.0, END)
 		self.text.insert(INSERT, message)
+		self.text.config(foreground=COLOR)
 
-		if conn:
 
-			self.submit_button1 = Button(self, text = "Continuar", command=lambda:change_frame(Carga))
-			self.submit_button1.grid(row=8, column=0, sticky = 'EW')
+
+			
 
 
 class Carga(Frame):
@@ -100,16 +125,36 @@ class Carga(Frame):
 	def __init__(self, master):
 		""" Inicialización del contenedor gráfico principal """
 		Frame.__init__(self, master)
-		self.grid(padx=20, pady=20)
+		self.pack(padx=20, pady=20)
+		master.geometry('550x300')
 		self.crear_widgets()
 
 	def crear_widgets(self):
-		"""crear boton, text y entrada"""
-		self.instruction1 = Label(self,text="Seleccione el archivo de carga: ")
-		self.instruction1.grid(row = 0, column = 0, columnspan = 1, sticky = 'E')
+		
+		MyText = StringVar()
 
-		self.file = Entry(self)
-		self.file.grid(row = 0, column = 2, sticky=W)
+		self.frame1 = Frame(self, bd=1, relief=SUNKEN)
+		self.frame1.pack(fill=X)
+		"""crear boton, text y entrada"""
+		self.instruction1 = Label(self.frame1,text="Archivo de carga: ")
+		self.instruction1.pack(side=LEFT, padx=5, pady=5)
+
+		self.filename = Entry(self.frame1, textvariable = MyText, width=40)
+		self.filename.pack(side=LEFT, expand=True, padx=(0, 5))
+
+		self.search_button = Button(self.frame1, text='Buscar', command=lambda:mostrarArch(MyText))
+		self.search_button.pack(side=LEFT, padx=5, pady=5)
+
+		self.load_button = Button(self.frame1, text='Cargar', command=lambda:exit())
+		self.load_button.pack(side=LEFT, padx=(10, 5), pady=5)
+		
+		#self.file = Entry(self)
+		#self.file.pack(fill=X, expand=True, padx=(0, 5))
+
+def mostrarArch(Var):
+	from tkinter import filedialog
+	file = filedialog.askopenfilename(title='Choose a file')
+	Var.set(file)
 
 root = Tk()
 root.title('Visor')
