@@ -6,7 +6,11 @@
 
 from tkinter import *
 import pymssql
+from datetime import datetime
 
+
+# VARIABLES GLOBALES
+HOST, PUERTO, USUARIO, PASSWORD = ('localhost', '1433', 'sa', '..asdf1234')
 
 def change_frame(newframe):
 
@@ -82,9 +86,14 @@ class Inicio(Frame):
 
 	def probar_conexion(self):
 
+
+		global HOST 
 		HOST = self.host.get()
+		global PUERTO 
 		PUERTO = self.puerto.get()
+		global USUARIO 
 		USUARIO = self.usuario.get()
+		global PASSWORD 
 		PASSWORD = self.password.get()
 
 		conn = None
@@ -92,6 +101,8 @@ class Inicio(Frame):
 		if HOST and PUERTO and USUARIO and PASSWORD:
 			try:
 				conn = pymssql.connect(HOST, USUARIO, PASSWORD, 'Matcher')
+				conn.close()
+
 				message = "Conexión establecida."
 				COLOR = 'green'
 				self.submit_button1.config(state=NORMAL)
@@ -117,6 +128,39 @@ class Inicio(Frame):
 
 
 
+class BD():
+
+	def __init__(self):
+		self.conn = pymssql.connect(HOST, USUARIO, PASSWORD, 'Matcher')
+
+	def get_cursor(self):
+		return self.conn.cursor()
+
+	def create_table(self):
+		self.get_cursor().execute("""
+		IF OBJECT_ID('h_msgs', 'U') IS NULL
+			CREATE TABLE h_msgs (
+			    id VARCHAR(16) NOT NULL,
+			    io VARCHAR(1),
+			    fecha DATE,
+			    tipo VARCHAR(3),
+			    receiver VARCHAR(12),
+			    PRIMARY KEY(id)
+			)
+		""")
+		self.conn.commit()
+
+	def save_trxs(self, trans):
+		""" Persist a list of trxs in DB """
+		self.get_cursor().executemany(
+			"INSERT INTO h_msgs VALUES (%s, %s, %s, %s, %s)",
+			trans)
+		self.conn.commit()
+
+
+	def close_connection():
+		self.conn.close()
+
 			
 
 
@@ -127,11 +171,18 @@ class Carga(Frame):
 		Frame.__init__(self, master)
 		self.pack(padx=20, pady=20)
 		master.geometry('550x300')
+
+
+		self.bd = BD()
+		self.bd.create_table()
+
 		self.crear_widgets()
 
 	def crear_widgets(self):
 		
 		MyText = StringVar()
+		varNumTrans = StringVar()
+		varProcStatus = StringVar()
 
 		self.frame1 = Frame(self, bd=1, relief=SUNKEN)
 		self.frame1.pack(fill=X)
@@ -142,19 +193,65 @@ class Carga(Frame):
 		self.filename = Entry(self.frame1, textvariable = MyText, width=40)
 		self.filename.pack(side=LEFT, expand=True, padx=(0, 5))
 
-		self.search_button = Button(self.frame1, text='Buscar', command=lambda:mostrarArch(MyText))
+		self.search_button = Button(self.frame1, text='Buscar', command=lambda:buscar_arch(MyText))
 		self.search_button.pack(side=LEFT, padx=5, pady=5)
 
-		self.load_button = Button(self.frame1, text='Cargar', command=lambda:exit())
+		self.load_button = Button(self.frame1, text='Cargar', command=lambda:cargar_arch(MyText))
 		self.load_button.pack(side=LEFT, padx=(10, 5), pady=5)
-		
-		#self.file = Entry(self)
-		#self.file.pack(fill=X, expand=True, padx=(0, 5))
 
-def mostrarArch(Var):
-	from tkinter import filedialog
-	file = filedialog.askopenfilename(title='Choose a file')
-	Var.set(file)
+		self.frame2 = Frame(self, bd=1)
+		self.frame2.pack(fill=BOTH)
+
+		self.proc_status = Label(self.frame2, textvariable = varProcStatus, fg='green')
+		self.proc_status.pack(fill=X, expand=True, padx=(0, 5))
+
+		self.num_trans_cargadas = Label(self.frame2, textvariable = varNumTrans)
+		self.num_trans_cargadas.pack(side=LEFT, padx=(0, 5))
+
+
+		def buscar_arch(Var):
+			""" Despliegue de modal de búsqueda y selección de archivo de carga """
+			from tkinter import filedialog
+			file = filedialog.askopenfilename(title='Choose a file')
+			Var.set(file)
+
+		def cargar_arch(Var):
+			""" Lectura y carga del archivo de datos """
+
+			varProcStatus.set('Procesando...')
+			self.proc_status.config(foreground='black')
+					
+			try:
+
+				with open(Var.get()) as f:
+					
+					trans = [(str(tran[0]), str(tran[5]), datetime.strptime(tran[7], '%d/%m/%Y').date(), str(tran[8]), str(tran[10])) for tran in map(lambda l: l.split(";") ,f.readlines()[1:]) if len(tran) > 1]
+					num_trans = len(trans) # conteo de transacciones
+					self.bd.save_trxs(trans)
+
+					varProcStatus.set('El archivo se ha procesado satisfactoriamente.')
+					self.proc_status.config(foreground='green')
+					varNumTrans.set("%s transacciones cargadas." % num_trans)
+
+			except IndexError:
+				varProcStatus.set('El archivo no cuenta con el formato apropiado.')
+				self.proc_status.config(foreground='red')
+				varNumTrans.set("")
+
+			except pymssql.IntegrityError:
+				varProcStatus.set('El archivo contiene transacciones ya cargadas en BD.')
+				self.proc_status.config(foreground='red')
+				varNumTrans.set("")
+
+
+
+def parsear_monto_moneda(linea):
+	monto, moneda = linea.split("/")
+	if moneda != 'XXX':
+		monto = monto.replace(',', '.')
+
+	return monto, moneda
+
 
 root = Tk()
 root.title('Visor')
