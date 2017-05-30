@@ -159,11 +159,68 @@ class BD():
 			trans)
 		self.conn.commit()
 
+	def get_msgs_text(self):
+		""" Retrieve a string with all text messages concatenated """
+		cursor = self.get_cursor()
+		cursor.execute(
+			"""	SELECT texto_msg as text
+				FROM h_msgs """)
+		txt = '\n'.join([row[0] for row in cursor.fetchall() if row[0] is not None])
+		txt = re.sub('}','}\n', txt)
+		return re.sub(r'(:\d+[A-Z]:)',r'\n\1', txt)
+					
+
 
 	def close_connection():
 		self.conn.close()
 
+
+class Busqueda(Frame):
+
+	def __init__(self, master):
+		""" Inicialización del contenedor gráfico principal """
+		Frame.__init__(self, master)
+		self.pack(padx=20, pady=20)
+
+		self.bd = BD()
+		self.bd.create_table()
+
+		self.crear_widgets()
 			
+
+	def crear_widgets(self):
+		""" Crear los elementos de interfaz del usuario """
+		def on_change(varname, index, mode):
+			canvas.itemconfigure(idx, text=s.get())
+    	
+
+		self.frame1 = Frame(self, bd=1, relief=SUNKEN)
+		self.frame1.pack(fill=X)
+		self.frame2 = Frame(self, bd=1, relief=SUNKEN, width=300, height=300)
+		self.frame2.pack(fill=BOTH)
+		canvas = Canvas(self.frame2,bg='#FFFFFF',width=600,height=600,scrollregion=(0,0,2800,3800))
+		hbar=Scrollbar(self.frame2,orient=HORIZONTAL)
+		hbar.pack(side=BOTTOM,fill=X)
+		hbar.config(command=canvas.xview)
+		vbar = Scrollbar(self.frame2, orient=VERTICAL)
+		vbar.pack(side=RIGHT,fill=Y)
+		vbar.config(command=canvas.yview)
+		canvas.config(width=600,height=600)
+		canvas.config(xscrollcommand=hbar.set, yscrollcommand=vbar.set)
+		canvas.pack(side=LEFT,expand=True,fill=BOTH)
+		s = StringVar()
+		s.set(self.bd.get_msgs_text())
+		idx = canvas.create_text(10, 10, anchor="nw", text=s.get())
+
+		s.trace_variable('w', on_change)
+
+		def trigger_change():
+			s.set('hola')
+
+
+
+
+
 
 
 class Carga(Frame):
@@ -226,7 +283,6 @@ class Carga(Frame):
 
 				return None
 
-
 			varProcStatus.set('Procesando...')
 			self.proc_status.config(foreground='black')
 					
@@ -252,14 +308,6 @@ class Carga(Frame):
 				self.proc_status.config(foreground='red')
 				varNumTrans.set("")
 
-			
-
-
-
-
-
-
-
 
 def parsear_monto_moneda(linea):
 	monto, moneda = linea.split("/")
@@ -273,7 +321,7 @@ root = Tk()
 root.title('Visor')
 root.geometry('550x300')
 
-carga = Carga(root)
+carga = Busqueda(root)
 
 #raise_frame(inicio)
 
