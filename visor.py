@@ -7,6 +7,7 @@
 from tkinter import *
 import pymssql
 from datetime import datetime
+import re
 
 
 # VARIABLES GLOBALES
@@ -140,12 +141,13 @@ class BD():
 		self.get_cursor().execute("""
 		IF OBJECT_ID('h_msgs', 'U') IS NULL
 			CREATE TABLE h_msgs (
-			    id VARCHAR(16) NOT NULL,
+				id BIGINT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+			    swift_tid VARCHAR(16) NOT NULL UNIQUE,
 			    io VARCHAR(1),
 			    fecha DATE,
 			    tipo VARCHAR(3),
 			    receiver VARCHAR(12),
-			    PRIMARY KEY(id)
+			    texto_msg TEXT
 			)
 		""")
 		self.conn.commit()
@@ -153,7 +155,7 @@ class BD():
 	def save_trxs(self, trans):
 		""" Persist a list of trxs in DB """
 		self.get_cursor().executemany(
-			"INSERT INTO h_msgs VALUES (%s, %s, %s, %s, %s)",
+			"INSERT INTO h_msgs VALUES (%s, %s, %s, %s, %s, %s)",
 			trans)
 		self.conn.commit()
 
@@ -170,8 +172,6 @@ class Carga(Frame):
 		""" Inicialización del contenedor gráfico principal """
 		Frame.__init__(self, master)
 		self.pack(padx=20, pady=20)
-		master.geometry('550x300')
-
 
 		self.bd = BD()
 		self.bd.create_table()
@@ -218,6 +218,15 @@ class Carga(Frame):
 		def cargar_arch(Var):
 			""" Lectura y carga del archivo de datos """
 
+			def obtener_texto_msg(arr):
+				""" Toma el arreglo de campos del msg y retorna un string con el texto del mensaje """
+				m = re.search('{1:.*-}', ''.join(arr))
+				if m:
+					return m.group(0)
+
+				return None
+
+
 			varProcStatus.set('Procesando...')
 			self.proc_status.config(foreground='black')
 					
@@ -225,7 +234,7 @@ class Carga(Frame):
 
 				with open(Var.get()) as f:
 					
-					trans = [(str(tran[0]), str(tran[5]), datetime.strptime(tran[7], '%d/%m/%Y').date(), str(tran[8]), str(tran[10])) for tran in map(lambda l: l.split(";") ,f.readlines()[1:]) if len(tran) > 1]
+					trans = [(str(tran[0]), str(tran[5]), datetime.strptime(tran[7], '%d/%m/%Y').date(), str(tran[8]), str(tran[10]), obtener_texto_msg(tran[25:])) for tran in map(lambda l: l.split(";") ,f.readlines()[1:]) if len(tran) > 1]
 					num_trans = len(trans) # conteo de transacciones
 					self.bd.save_trxs(trans)
 
@@ -243,6 +252,13 @@ class Carga(Frame):
 				self.proc_status.config(foreground='red')
 				varNumTrans.set("")
 
+			
+
+
+
+
+
+
 
 
 def parsear_monto_moneda(linea):
@@ -255,9 +271,9 @@ def parsear_monto_moneda(linea):
 
 root = Tk()
 root.title('Visor')
-root.geometry('350x300')
+root.geometry('550x300')
 
-inicio = Inicio(root)
+carga = Carga(root)
 
 #raise_frame(inicio)
 
