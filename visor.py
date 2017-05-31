@@ -62,7 +62,7 @@ class Inicio(Frame):
 		self.frame4.pack(fill=X)
 
 		self.instruction4 = Label(self.frame4,text="Password: ", width=8, anchor=E)
-		self.instruction4.pack(side=LEFT, padx=5, pady=5)
+		self.instruction4.pack(side=LEFT, padx=5, pady=5, anchor=E)
 
 		self.password = Entry(self.frame4, show="*")
 		self.password.pack(fill=X, expand=True, padx=(0, 5))
@@ -101,7 +101,7 @@ class Inicio(Frame):
 
 		if HOST and PUERTO and USUARIO and PASSWORD:
 			try:
-				conn = pymssql.connect(HOST, USUARIO, PASSWORD, 'Matcher')
+				conn = pymssql.connect(HOST, USUARIO, PASSWORD, 'Matcher1')
 				conn.close()
 
 				message = "Conexión establecida."
@@ -132,7 +132,7 @@ class Inicio(Frame):
 class BD():
 
 	def __init__(self):
-		self.conn = pymssql.connect(HOST, USUARIO, PASSWORD, 'Matcher')
+		self.conn = pymssql.connect(HOST, USUARIO, PASSWORD, 'Matcher1')
 
 	def get_cursor(self):
 		return self.conn.cursor()
@@ -180,7 +180,8 @@ class Busqueda(Frame):
 	def __init__(self, master):
 		""" Inicialización del contenedor gráfico principal """
 		Frame.__init__(self, master)
-		self.pack(padx=20, pady=20)
+		master.geometry('750x500')
+		self.pack(fill=BOTH, expand=True, padx=20, pady=20)
 
 		self.bd = BD()
 		self.bd.create_table()
@@ -191,36 +192,42 @@ class Busqueda(Frame):
 	def crear_widgets(self):
 		""" Crear los elementos de interfaz del usuario """
 		def on_change(varname, index, mode):
-			canvas.itemconfigure(idx, text=s.get())
+                        txt = s.get()
+                        num_lines = len(re.findall('\n', txt))
+                        canvas.itemconfigure(idx, text=s.get())
+                        canvas.config(scrollregion=(0, 0, 1000, 400 + num_lines * 13))
     	
 
 		self.frame1 = Frame(self, bd=1, relief=SUNKEN)
 		self.frame1.pack(fill=X)
 		self.frame2 = Frame(self, bd=1, relief=SUNKEN, width=300, height=300)
-		self.frame2.pack(fill=BOTH)
-		canvas = Canvas(self.frame2,bg='#FFFFFF',width=600,height=600,scrollregion=(0,0,2800,3800))
-		hbar=Scrollbar(self.frame2,orient=HORIZONTAL)
-		hbar.pack(side=BOTTOM,fill=X)
+		self.frame2.pack(fill=X)
+		
+		
+		self.carga_button = Button(self, text='Ir a Carga', command=lambda:(self.destroy(), change_frame(Carga)))
+		self.carga_button.pack(side=RIGHT, padx=5, pady=(10, 5))
+		self.carga_button.place(rely=1.0, relx=1.0, x=0, y=0, anchor=SE)
+
+		
+		canvas = Canvas(self.frame2, bg='#FFFFFF', width=300, height=400)
+		canvas.config(highlightthickness=0)
+		hbar=Scrollbar(self.frame2, orient=HORIZONTAL)
+		hbar.pack(side=BOTTOM, fill=X)
 		hbar.config(command=canvas.xview)
 		vbar = Scrollbar(self.frame2, orient=VERTICAL)
-		vbar.pack(side=RIGHT,fill=Y)
+		vbar.pack(side=RIGHT, fill=Y)
 		vbar.config(command=canvas.yview)
-		canvas.config(width=600,height=600)
 		canvas.config(xscrollcommand=hbar.set, yscrollcommand=vbar.set)
-		canvas.pack(side=LEFT,expand=True,fill=BOTH)
+		canvas.pack(side=LEFT, expand=True, fill=X)
 		s = StringVar()
-		s.set(self.bd.get_msgs_text())
 		idx = canvas.create_text(10, 10, anchor="nw", text=s.get())
 
 		s.trace_variable('w', on_change)
 
-		def trigger_change():
-			s.set('hola')
+		s.set(self.bd.get_msgs_text())
 
 
-
-
-
+		 
 
 
 class Carga(Frame):
@@ -228,8 +235,8 @@ class Carga(Frame):
 	def __init__(self, master):
 		""" Inicialización del contenedor gráfico principal """
 		Frame.__init__(self, master)
-		self.pack(padx=20, pady=20)
-
+		self.pack(fill=BOTH, expand=True, padx=20, pady=20)
+		master.geometry('550x200')
 		self.bd = BD()
 		self.bd.create_table()
 
@@ -264,6 +271,10 @@ class Carga(Frame):
 
 		self.num_trans_cargadas = Label(self.frame2, textvariable = varNumTrans)
 		self.num_trans_cargadas.pack(side=LEFT, padx=(0, 5))
+
+		self.busqueda_button = Button(self, text='Ir a Busqueda', command=lambda:(self.destroy(), change_frame(Busqueda)))
+		self.busqueda_button.pack(side=RIGHT, padx=5, pady=(10, 5))
+		self.busqueda_button.place(rely=1.0, relx=1.0, x=0, y=0, anchor=SE)
 
 
 		def buscar_arch(Var):
@@ -319,7 +330,6 @@ def parsear_monto_moneda(linea):
 
 root = Tk()
 root.title('Visor')
-root.geometry('550x300')
 
 carga = Busqueda(root)
 
