@@ -6,6 +6,7 @@
 
 from tkinter import *
 from tkinter import messagebox
+from tkinter import scrolledtext
 import pymssql
 from datetime import datetime
 import re
@@ -86,7 +87,7 @@ def change_frame(newframe):
 class BD():
 
     def __init__(self):
-        self.conn = pymssql.connect(HOST, USUARIO, PASSWORD, 'Matcher1')
+        self.conn = pymssql.connect(HOST, USUARIO, PASSWORD, 'Matcher')
 
     def get_cursor(self):
         return self.conn.cursor()
@@ -126,10 +127,13 @@ class BD():
     def get_msgs_text(self, text, fecha1, fecha2):
         """ Retrieve a string with all text messages that match the given criteria """
         cursor = self.get_cursor()
-        cursor.execute(
-            r""" SELECT texto_msg as text
-                FROM h_msgs 
-                WHERE texto_msg COLLATE Latin1_General_CI_AS LIKE '%%%s%%'""" % (text))
+        query = (""" SELECT texto_msg as text
+	                 FROM h_msgs 
+	                 WHERE texto_msg COLLATE Latin1_General_CI_AS LIKE '%%%s%%'
+	                 AND fecha BETWEEN %s AND %s
+	             """) % (text, fecha1, fecha2)
+        print(query)
+        cursor.execute(query)
         txt = '\n'.join([row[0] for row in cursor.fetchall() if row[0] is not None])
         txt = re.sub('}','}\n', txt)
         return re.sub(r'(:\d+[A-Z]:)',r'\n\1', txt)
@@ -159,13 +163,18 @@ class Busqueda(Frame):
         def on_change(varname, index, mode):
             txt = s.get()
             num_lines = len(re.findall('\n', txt))
-            canvas.itemconfigure(idx, text=s.get())
-            canvas.config(scrollregion=(0, 0, 300, 400 + num_lines * 13))
+            self.txt.config(state=NORMAL)
+            self.txt.delete(1.0, END)
+            self.txt.insert(INSERT, txt)
+            self.txt.config(state=DISABLED)
+
                         
         def buscar():
             """ Obtiene de bd y muestra el texto de los mensajes solicitados """
             if validar_input():
-              self.bd.get_msgs_text(self.text.get(), self.date1.get(), self.date2.get())
+            	date1 = '\'01/01/1977\'' if not self.date1.get() else ('DATEFROMPARTS(' + self.date1.get()[6:] + ',' + self.date1.get()[3:5]+ ',' +  self.date1.get()[0:2] + ')')
+            	date2 = 'GETDATE()' if not self.date2.get() else ('DATEFROMPARTS(' + self.date2.get()[6:] + ',' + self.date2.get()[3:5]+ ',' +  self.date2.get()[0:2] + ')')
+            	s.set(self.bd.get_msgs_text(self.text.get(), date1, date2))
                         
         def validar_input():
             date1, date2 = (self.date1.get(), self.date2.get())
@@ -187,7 +196,15 @@ class Busqueda(Frame):
                     messagebox.showerror('Error de formato', '%s no es una fecha valida' % date2)
                     return False
 
-            return True      
+            return True
+
+        def imprimir():
+        	archivo = BASE_DIR + '\\archivo.txt'
+        	fo = open(archivo, 'w')
+        	fo.write(s.get())
+        	fo.close()
+
+
                                 
 
         self.frame1 = Frame(self, bd=1, relief=SUNKEN)
@@ -214,34 +231,25 @@ class Busqueda(Frame):
         self.frame3 = Frame(self, bd=0)
         self.frame3.pack(fill=X, pady=(20, 5))
         
-        self.print_button = Button(self.frame3, text='Imprimir', width=8)
+        self.print_button = Button(self.frame3, text='Imprimir', width=8, command=imprimir)
         self.print_button.pack(side=LEFT, padx=(30, 5))
         
-        self.frame2 = Frame(self, bd=1, relief=SUNKEN)
-        self.frame2.pack(fill=X, pady=(0,10))
+        self.frame2 = Frame(self, bd=1, height=300)
+        self.frame2.pack(fill=X, pady=(0,40))
+
+        s = StringVar()
+        s.set('Prueba')
+        self.txt = scrolledtext.ScrolledText(self.frame2, undo=True)
+        self.txt['font'] = ('consolas', '12')
+        self.txt.pack(fill=X)
+
+        self.frame4 = Frame(self, bd=1)
+        self.frame4.pack(fill=X, pady=(0,10))
         
         self.carga_button = Button(self, text='Ir a Carga', command=lambda:(self.destroy(), change_frame(Carga)))
-        self.carga_button.pack(side=RIGHT, padx=5, pady=(10, 5))
         self.carga_button.place(rely=1.0, relx=1.0, x=0, y=0, anchor=SE)
 
-        
-        canvas = Canvas(self.frame2, bg='#FFFFFF', width=300, height=400)
-        canvas.config(highlightthickness=0)
-        hbar=Scrollbar(self.frame2, orient=HORIZONTAL)
-        hbar.pack(side=BOTTOM, fill=X)
-        hbar.config(command=canvas.xview)
-        vbar = Scrollbar(self.frame2, orient=VERTICAL)
-        vbar.pack(side=RIGHT, fill=Y)
-        vbar.config(command=canvas.yview)
-        canvas.config(xscrollcommand=hbar.set, yscrollcommand=vbar.set)
-        canvas.pack(side=LEFT, expand=True, fill=X)
-        s = StringVar()
-        idx = canvas.create_text(10, 10, anchor="nw", text=s.get())
-
         s.trace_variable('w', on_change)
-
-        s.set(self.bd.get_all_msgs_text())
-
 
          
 
