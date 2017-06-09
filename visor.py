@@ -121,22 +121,23 @@ class BD():
             """ SELECT texto_msg as text
                 FROM h_msgs """)
         txt = '\n'.join([row[0] for row in cursor.fetchall() if row[0] is not None])
-        txt = re.sub('}','}\n', txt)
-        return re.sub(r'(:\d+[A-Z]:)',r'\n\1', txt)
+        txt = re.sub('(}}?)','\1\n', txt)
+        return re.sub(r'(:\d+[A-Z]?:)',r'\n\1', txt)
 
-    def get_msgs_text(self, text, fecha1, fecha2):
+    def get_msgs_text(self, text, fecha1, fecha2, tipo):
         """ Retrieve a string with all text messages that match the given criteria """
         cursor = self.get_cursor()
         query = (""" SELECT texto_msg as text
-	                 FROM h_msgs 
-	                 WHERE texto_msg COLLATE Latin1_General_CI_AS LIKE '%%%s%%'
-	                 AND fecha BETWEEN %s AND %s
-	             """) % (text, fecha1, fecha2)
+                     FROM h_msgs 
+                     WHERE texto_msg COLLATE Latin1_General_CI_AS LIKE '%%%s%%'
+                     AND fecha BETWEEN %s AND %s
+                     AND tipo LIKE '%%%s%%'
+                 """) % (text, fecha1, fecha2, tipo)
         print(query)
         cursor.execute(query)
         txt = '\n'.join([row[0] for row in cursor.fetchall() if row[0] is not None])
-        txt = re.sub('}','}\n', txt)
-        return re.sub(r'(:\d+[A-Z]:)',r'\n\1', txt)
+        txt = re.sub(r'(\}\}?)',r'\1\n', txt)
+        return re.sub(r'(:\d+[A-Z]?:)',r'\n\1', txt)
 
 
     def close_connection():
@@ -172,9 +173,10 @@ class Busqueda(Frame):
         def buscar():
             """ Obtiene de bd y muestra el texto de los mensajes solicitados """
             if validar_input():
-            	date1 = '\'01/01/1977\'' if not self.date1.get() else ('DATEFROMPARTS(' + self.date1.get()[6:] + ',' + self.date1.get()[3:5]+ ',' +  self.date1.get()[0:2] + ')')
-            	date2 = 'GETDATE()' if not self.date2.get() else ('DATEFROMPARTS(' + self.date2.get()[6:] + ',' + self.date2.get()[3:5]+ ',' +  self.date2.get()[0:2] + ')')
-            	s.set(self.bd.get_msgs_text(self.text.get(), date1, date2))
+                date1 = '\'01/01/1977\'' if not self.date1.get() else ('DATEFROMPARTS(' + self.date1.get()[6:] + ',' + self.date1.get()[3:5]+ ',' +  self.date1.get()[0:2] + ')')
+                date2 = 'GETDATE()' if not self.date2.get() else ('DATEFROMPARTS(' + self.date2.get()[6:] + ',' + self.date2.get()[3:5]+ ',' +  self.date2.get()[0:2] + ')')
+                tipo = self.VarTipo.get()
+                s.set(self.bd.get_msgs_text(self.text.get(), date1, date2, tipo))
                         
         def validar_input():
             date1, date2 = (self.date1.get(), self.date2.get())
@@ -199,13 +201,12 @@ class Busqueda(Frame):
             return True
 
         def imprimir():
-        	archivo = BASE_DIR + '\\archivo.txt'
-        	fo = open(archivo, 'w')
-        	fo.write(s.get())
-        	fo.close()
-
-
-                                
+            archivo = BASE_DIR + '\\%s.txt' %  datetime.now().strftime('%Y%m%d-%H%M%S')
+            fo = open(archivo, 'w')
+            fo.write(s.get())
+            fo.close()
+            messagebox.showinfo('', 'Archivo generado')
+                     
 
         self.frame1 = Frame(self, bd=1, relief=SUNKEN)
         self.frame1.pack(fill=X)
@@ -225,6 +226,15 @@ class Busqueda(Frame):
         self.date2 = Entry(self.frame1, width=10)
         self.date2.pack(side=LEFT, padx=(0, 5))
 
+        self.VarTipo = StringVar()
+        self.VarTipo.set('')
+
+        self.instruction2 = Label(self.frame1, text="Tipo: ", width=8, anchor=E)
+        self.instruction2.pack(side=LEFT, padx=5, pady=5)
+
+        self.listbox = OptionMenu(self.frame1, self.VarTipo, "", "103", "199")
+        self.listbox.pack(side=LEFT, padx=(0, 5))
+
         self.search_button = Button(self.frame1, text='Buscar', width=10, command=buscar)
         self.search_button.pack(side=LEFT, padx=(60, 5), pady=5)
 
@@ -239,7 +249,7 @@ class Busqueda(Frame):
 
         s = StringVar()
         s.set('Prueba')
-        self.txt = scrolledtext.ScrolledText(self.frame2, undo=True)
+        self.txt = scrolledtext.ScrolledText(self.frame2, undo=True, state=DISABLED)
         self.txt['font'] = ('consolas', '12')
         self.txt.pack(fill=X)
 
