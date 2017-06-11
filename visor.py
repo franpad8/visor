@@ -1,9 +1,9 @@
 # Código Fuente de Visor.
 # Programa para cargar, visualizar y exportar datos
 # de transacciones financieras.
-# Creadores: BCG
+# Creadores: Business Computer Group (BCG)
 
-
+import sys
 from tkinter import *
 from tkinter import messagebox
 from tkinter import scrolledtext
@@ -11,6 +11,11 @@ import pymssql
 from datetime import datetime
 import re
 import os
+import _mssql
+import decimal
+import uuid
+
+from textwrap import fill
 
 #Set DB arguments
 from Crypto.Cipher import AES
@@ -20,7 +25,7 @@ import binascii
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 def get_bd_args():
-
+    """ Extraer y decodificar los argumentos de conexión a la base de datos """
     global BASE_DIR
     global HOST
     global USUARIO
@@ -28,14 +33,15 @@ def get_bd_args():
 
     #ruta del archivo a leer
     ruta = BASE_DIR + "\Configuracion.txt"
-    print(ruta)
 
     try:
         #abrir archivo
         fo = open(ruta, 'r')
     except FileNotFoundError:
-        print("No se encuentra el archivo de configuración.")
-        exit(1)
+        root = Tk()
+        root.withdraw()
+        messagebox.showerror("Error", "No se encuentra el archivo de configuración.")
+        sys.exit()
 
     lines = fo.readlines()
     obj1 = AES.new('BCGBCG9876543210', AES.MODE_CFB, 'BCGBCG0123456789')
@@ -51,8 +57,6 @@ def get_bd_args():
             bla = binascii.hexlify(b)
             ciphertext = binascii.unhexlify(bla)
             ciphertext = base64.b64decode(ciphertext)
-                 
-            
 
             if opcion == "[H]":
                 plaintext = obj1.decrypt(ciphertext)
@@ -67,27 +71,106 @@ def get_bd_args():
                 PASSWORD = str(plaintext)[2:][:-1]
 
     except IndexError:
-        print("Archivo de Configuración corrupto.")
-        exit(1)
-
+        root = Tk()
+        root.withdraw()
+        messagebox.showerror("Error", "Archivo de Configuración corrupto.")
+        sys.exit()
 
 
 # VARIABLES GLOBALES
 HOST, PUERTO, USUARIO, PASSWORD = ('', '', '', '')
 
 
-
-
 def change_frame(newframe):
-
+    """ Cambia el frame o ventana principal de la aplicación """
     carga = newframe(root)
     carga.tkraise()
+
+
+def formato_expandido(txt):
+    """ Funcion que toma texto de mensaje en formato fast mode y lo 
+        convierte a formato expandido """
+    txt = re.sub(r'\{1:F01(.{8}).*?\}.*?{2:([I|O])103.{10}(.{8}).*?\}\{3:\{.*?\}\}', 
+                        r"""
+--------------------------- Message Header -------------------------    
+        I/O: \2             : FIN 103 Single Customer Credit Transfer
+        Sender : \1 
+        Receiver : \3 """,
+                    txt)
+    txt = re.sub(r'\{4:', r"""
+--------------------------- Message Text ---------------------------
+""", txt)
+    txt = re.sub(r':20:(.*)',
+      r"""        20: Sender's Reference
+            \1""", 
+    txt)
+    txt = re.sub(r':23B:(.*)',
+      r"""        23B: Bank Operation Code
+             \1""", 
+    txt)
+    txt = re.sub(r':23E:(.{4})/(.*)',
+      r"""        23E: Instruction Code
+             Instruction :  \1
+             Additional info :  \2""", 
+    txt)
+    txt = re.sub(r':32A:(\d{2})(\d{2})(\d{2})(.{3})(.*)',
+      r"""        32A: Val Dte/Curr/Interbnk Settld Amt
+             Date        :  \3/\2/20\1
+             Currency    :  \4
+             Amount      :  #\5#""", 
+    txt)
+    txt = re.sub(r':50K:(/\d+)(.*)',
+      r"""        50K: Ordering Customer-Name & Address
+             \1
+             \2""", 
+    txt)
+    txt = re.sub(r':53B:(/\d+)(.*)',
+      r"""        53B: Sender's Correspondent-Name & Address
+             \1
+             \2""", 
+    txt)
+    txt = re.sub(r':57A:(.*)',
+      r"""        57A: Account with Institution
+             \1""", 
+    txt)
+    txt = re.sub(r':57D:(//[A-Z]*\d+)(.*)',
+      r"""        57D: Account with Institution
+             \1
+             \2""", 
+    txt)
+    txt = re.sub(r':59:(/[A-Z]*\d+)(.*)',
+      r"""        59: Beneficiary Customer-Name & Addr
+            \1
+            \2""", 
+    txt)
+    txt = re.sub(r':70:(.*)',
+      r"""        70: Remittance Information
+            \1""", 
+    txt)
+    txt = re.sub(r':71A:(.*)',
+      r"""        71A: Details of Charges
+             \1""", 
+    txt)
+    txt = re.sub(r':(\d{2}[A-Z]?):(.*)',
+      r"""        \1: \2""", 
+    txt)
+
+    txt = re.sub(r'-\}', r'\n\n\n', txt)
+    #txt = "\n\t".join(list(map(lambda x:fill(x, 75, replace_whitespace=False), txt.splitlines())))
+    return txt
+            
 
 
 class BD():
 
     def __init__(self):
-        self.conn = pymssql.connect(HOST, USUARIO, PASSWORD, 'Matcher')
+        try:
+            self.conn = pymssql.connect(HOST, USUARIO, PASSWORD, 'Matcher')
+        except pymssql.OperationalError as oe:
+            root.withdraw()
+            messagebox.showerror("Error de conexión a la Base de Datos", str(oe))
+            sys.exit()
+
 
     def get_cursor(self):
         return self.conn.cursor()
@@ -127,17 +210,32 @@ class BD():
     def get_msgs_text(self, text, fecha1, fecha2, tipo):
         """ Retrieve a string with all text messages that match the given criteria """
         cursor = self.get_cursor()
-        query = (""" SELECT texto_msg as text
-                     FROM h_msgs 
+        query = (""" SELECT texto_msg, tipo, io as text
+                     FROM h_msgs
                      WHERE texto_msg COLLATE Latin1_General_CI_AS LIKE '%%%s%%'
                      AND fecha BETWEEN %s AND %s
                      AND tipo LIKE '%%%s%%'
                  """) % (text, fecha1, fecha2, tipo)
         print(query)
         cursor.execute(query)
-        txt = '\n'.join([row[0] for row in cursor.fetchall() if row[0] is not None])
-        txt = re.sub(r'(\}\}?)',r'\1\n', txt)
-        return re.sub(r'(:\d+[A-Z]?:)',r'\n\1', txt)
+        acc = ''
+        num_results = 0
+        #txt = '\n'.join([row[0] for row in cursor.fetchall() if row[0] is not None])
+
+        for row in cursor.fetchall():
+            if row[0] is not None:
+                txt = re.sub(r'(:\d+[A-Z]?:)',r'\n\1', row[0])
+
+                tipo = row[1]
+                # A los mensajes 103, los imprimimos con formato parecido a prt
+                if tipo == '103': 
+                    txt = formato_expandido(txt)
+
+                acc = acc + "\n" + txt
+                num_results = num_results + 1
+
+        acc = re.sub(r'(\}\}?)',r'\1\n', acc)
+        return (num_results, acc)
 
 
     def close_connection():
@@ -149,8 +247,8 @@ class Busqueda(Frame):
     def __init__(self, master):
         """ Inicialización del contenedor gráfico principal """
         Frame.__init__(self, master)
-        master.geometry('800x600')
-        self.pack(fill=BOTH, expand=True, padx=20, pady=20)
+        master.geometry('900x700')
+        self.pack(fill=BOTH, padx=20, pady=(20,20), expand=True)
 
         self.bd = BD()
         self.bd.create_table()
@@ -163,7 +261,6 @@ class Busqueda(Frame):
 
         def on_change(varname, index, mode):
             txt = s.get()
-            num_lines = len(re.findall('\n', txt))
             self.txt.config(state=NORMAL)
             self.txt.delete(1.0, END)
             self.txt.insert(INSERT, txt)
@@ -176,7 +273,9 @@ class Busqueda(Frame):
                 date1 = '\'01/01/1977\'' if not self.date1.get() else ('DATEFROMPARTS(' + self.date1.get()[6:] + ',' + self.date1.get()[3:5]+ ',' +  self.date1.get()[0:2] + ')')
                 date2 = 'GETDATE()' if not self.date2.get() else ('DATEFROMPARTS(' + self.date2.get()[6:] + ',' + self.date2.get()[3:5]+ ',' +  self.date2.get()[0:2] + ')')
                 tipo = self.VarTipo.get()
-                s.set(self.bd.get_msgs_text(self.text.get(), date1, date2, tipo))
+                num_results, text_results = self.bd.get_msgs_text(self.text.get(), date1, date2, tipo)
+                VarNumResults.set(str(num_results) + " mensajes encontrados")
+                s.set(text_results)
                         
         def validar_input():
             date1, date2 = (self.date1.get(), self.date2.get())
@@ -206,10 +305,19 @@ class Busqueda(Frame):
             fo.write(s.get())
             fo.close()
             messagebox.showinfo('', 'Archivo generado')
+
+        def limpiar():
+            self.VarTipo.set('')
+            self.date1.delete(0, END)
+            self.date1.insert(0, "")
+            self.date2.delete(0, END)
+            self.date2.insert(0, "")
+            self.text.delete(0, END)
+            self.text.insert(0, "")
                      
 
-        self.frame1 = Frame(self, bd=1, relief=SUNKEN)
-        self.frame1.pack(fill=X)
+        self.frame1 = Frame(self, bd=1, relief=RAISED)
+        self.frame1.pack(fill=BOTH)
 
         self.instruction1 = Label(self.frame1, text="Texto: ", width=8, anchor=E)
         self.instruction1.pack(side=LEFT, padx=5, pady=5)
@@ -217,11 +325,14 @@ class Busqueda(Frame):
         self.text = Entry(self.frame1)
         self.text.pack(side=LEFT, padx=(0, 5))
 
-        self.instruction2 = Label(self.frame1, text="Fecha: ", width=8, anchor=E)
+        self.instruction2 = Label(self.frame1, text="Fecha (dd/mm/aaaa):", width=18, anchor=E)
         self.instruction2.pack(side=LEFT, padx=5, pady=5)
 
         self.date1 = Entry(self.frame1, width=10)
-        self.date1.pack(side=LEFT, padx=(0, 5))
+        self.date1.pack(side=LEFT, padx=0)
+
+        self.dash = Label(self.frame1, text="-", width=1, anchor=E)
+        self.dash.pack(side=LEFT, padx=(0,1), pady=5)
         
         self.date2 = Entry(self.frame1, width=10)
         self.date2.pack(side=LEFT, padx=(0, 5))
@@ -232,29 +343,36 @@ class Busqueda(Frame):
         self.instruction2 = Label(self.frame1, text="Tipo: ", width=8, anchor=E)
         self.instruction2.pack(side=LEFT, padx=5, pady=5)
 
-        self.listbox = OptionMenu(self.frame1, self.VarTipo, "", "103", "199")
+        self.listbox = OptionMenu(self.frame1, self.VarTipo, "", "103", "110", "199", "202", "740", "799", "999")
         self.listbox.pack(side=LEFT, padx=(0, 5))
 
-        self.search_button = Button(self.frame1, text='Buscar', width=10, command=buscar)
-        self.search_button.pack(side=LEFT, padx=(60, 5), pady=5)
+        self.search_button = Button(self.frame1, text='Buscar', width=10, font="Helvetica 10", command=buscar)
+        self.search_button.pack(side=LEFT, padx=(40, 5), pady=5)
+
+        self.clear_button = Button(self.frame1, text='Limpiar', width=10, font="Helvetica 8", command=limpiar)
+        self.clear_button.pack(side=LEFT, padx=(20,5), pady=5)
 
         self.frame3 = Frame(self, bd=0)
         self.frame3.pack(fill=X, pady=(20, 5))
         
-        self.print_button = Button(self.frame3, text='Imprimir', width=8, command=imprimir)
+        self.print_button = Button(self.frame3, text='Imprimir', width=8, font="Helvetica 9", command=imprimir)
         self.print_button.pack(side=LEFT, padx=(30, 5))
+
+        VarNumResults = StringVar()
+        VarNumResults.set('')
+        self.num_res = Label(self.frame3, textvariable=VarNumResults, width=30, foreground='green', font="Helvetica 9 bold")
+        self.num_res.pack(side=RIGHT, padx=5, pady=0)
         
-        self.frame2 = Frame(self, bd=1, height=300)
-        self.frame2.pack(fill=X, pady=(0,40))
+        self.frame2 = Frame(self, bd=1)
+        self.frame2.pack(fill=BOTH, pady=(0,30), expand=True)
 
         s = StringVar()
         s.set('Prueba')
         self.txt = scrolledtext.ScrolledText(self.frame2, undo=True, state=DISABLED)
         self.txt['font'] = ('consolas', '12')
-        self.txt.pack(fill=X)
+        self.txt.pack(fill=BOTH, pady=(0,0), expand=True)
 
-        self.frame4 = Frame(self, bd=1)
-        self.frame4.pack(fill=X, pady=(0,10))
+       
         
         self.carga_button = Button(self, text='Ir a Carga', command=lambda:(self.destroy(), change_frame(Carga)))
         self.carga_button.place(rely=1.0, relx=1.0, x=0, y=0, anchor=SE)
@@ -282,31 +400,31 @@ class Carga(Frame):
         varNumTrans = StringVar()
         varProcStatus = StringVar()
 
-        self.frame1 = Frame(self, bd=1, relief=SUNKEN)
+        self.frame1 = Frame(self, bd=1, relief=RAISED)
         self.frame1.pack(fill=X)
-        """crear boton, text y entrada"""
-        self.instruction1 = Label(self.frame1,text="Archivo de carga: ")
-        self.instruction1.pack(side=LEFT, padx=5, pady=5)
+
+        self.instruction1 = Label(self.frame1,text="Archivo de carga:", width=18)
+        self.instruction1.pack(side=LEFT, padx=0, pady=5)
 
         self.filename = Entry(self.frame1, textvariable = MyText, width=40)
-        self.filename.pack(side=LEFT, expand=True, padx=(0, 5))
+        self.filename.pack(side=LEFT, padx=(0, 5))
 
-        self.search_button = Button(self.frame1, text='Buscar', command=lambda:buscar_arch(MyText))
-        self.search_button.pack(side=LEFT, padx=5, pady=5)
+        self.search_button = Button(self.frame1, text='Buscar', font="Helvetica 10", command=lambda:buscar_arch(MyText))
+        self.search_button.pack(side=LEFT, padx=(10,5), pady=5)
 
-        self.load_button = Button(self.frame1, text='Cargar', command=lambda:cargar_arch(MyText))
+        self.load_button = Button(self.frame1, text='Cargar', font="Helvetica 9", command=lambda:cargar_arch(MyText))
         self.load_button.pack(side=LEFT, padx=(10, 5), pady=5)
 
         self.frame2 = Frame(self, bd=1)
         self.frame2.pack(fill=BOTH)
 
-        self.proc_status = Label(self.frame2, textvariable = varProcStatus, fg='green')
+        self.proc_status = Label(self.frame2, textvariable = varProcStatus, foreground='green', font="Helvetica 9 bold")
         self.proc_status.pack(fill=X, expand=True, padx=(0, 5))
 
-        self.num_trans_cargadas = Label(self.frame2, textvariable = varNumTrans)
-        self.num_trans_cargadas.pack(side=LEFT, padx=(0, 5))
+        self.num_trans_cargadas = Label(self.frame2, textvariable = varNumTrans, font="Helvetica 8 bold")
+        self.num_trans_cargadas.pack(fill=X, expand=True, padx=(0, 5))
 
-        self.busqueda_button = Button(self, text='Ir a Busqueda', command=lambda:(self.destroy(), change_frame(Busqueda)))
+        self.busqueda_button = Button(self, text='Ir a Búsqueda', command=lambda:(self.destroy(), change_frame(Busqueda)))
         self.busqueda_button.pack(side=RIGHT, padx=5, pady=(10, 5))
         self.busqueda_button.place(rely=1.0, relx=1.0, x=0, y=0, anchor=SE)
 
@@ -335,23 +453,26 @@ class Carga(Frame):
 
                 with open(Var.get()) as f:
                     
-                    trans = [(str(tran[0]), str(tran[5]), datetime.strptime(tran[7], '%d/%m/%Y').date(), str(tran[8]), str(tran[10]), obtener_texto_msg(tran[25:])) for tran in map(lambda l: l.split(";") ,f.readlines()[1:]) if len(tran) > 1]
+                    trans = [(str(tran[0]), str(tran[5]), datetime.strptime(tran[7], '%d/%m/%Y').date(), str(tran[8]), str(tran[10]), obtener_texto_msg(tran[25:]))
+                                    for tran in map(lambda l: l.split(";") ,[line for line in f.readlines()[1:] if line.strip() != ''])]
                     num_trans = len(trans) # conteo de transacciones
                     self.bd.save_trxs(trans)
-
+                    num_trans = 1280
                     varProcStatus.set('El archivo se ha procesado satisfactoriamente.')
                     self.proc_status.config(foreground='green')
                     varNumTrans.set("%s transacciones cargadas." % num_trans)
 
             except IndexError:
-                varProcStatus.set('El archivo no cuenta con el formato apropiado.')
-                self.proc_status.config(foreground='red')
-                varNumTrans.set("")
+                messagebox.showerror("Error", 'El archivo no cuenta con el formato apropiado.')
+                varProcStatus.set('')
 
             except pymssql.IntegrityError:
-                varProcStatus.set('El archivo contiene transacciones ya cargadas en BD.')
-                self.proc_status.config(foreground='red')
-                varNumTrans.set("")
+                messagebox.showerror("Error", 'El archivo contiene transacciones ya cargadas en BD.')
+                varProcStatus.set('')
+
+            except FileNotFoundError:
+                messagebox.showerror("Error", 'No se encuentra el archivo seleccionado.')
+                varProcStatus.set('')
 
 
 def parsear_monto_moneda(linea):
