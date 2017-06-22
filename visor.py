@@ -15,8 +15,6 @@ import _mssql
 import decimal
 import uuid
 
-from textwrap import fill
-
 #Set DB arguments
 from Crypto.Cipher import AES
 import base64
@@ -30,6 +28,7 @@ def get_bd_args():
     global HOST
     global USUARIO
     global PASSWORD
+    global DBNAME
 
     #ruta del archivo a leer
     ruta = BASE_DIR + "\Configuracion.txt"
@@ -47,9 +46,10 @@ def get_bd_args():
     obj1 = AES.new('BCGBCG9876543210', AES.MODE_CFB, 'BCGBCG0123456789')
     obj2 = AES.new('BCGBCG9876543210', AES.MODE_CFB, 'BCGBCG0123456789')
     obj3 = AES.new('BCGBCG9876543210', AES.MODE_CFB, 'BCGBCG0123456789')
+    obj4 = AES.new('BCGBCG9876543210', AES.MODE_CFB, 'BCGBCG0123456789')
 
     try:
-        for line in lines[1:4]:
+        for line in lines[1:]:
             opcion = line[:3]
 
             cargar = line[5:][:-1]
@@ -70,6 +70,10 @@ def get_bd_args():
                 plaintext = obj3.decrypt(ciphertext)
                 PASSWORD = str(plaintext)[2:][:-1]
 
+            elif opcion == "[B]":
+                plaintext = obj4.decrypt(ciphertext)
+                DBNAME = str(plaintext)[2:][:-1]
+
     except IndexError:
         root = Tk()
         root.withdraw()
@@ -78,7 +82,7 @@ def get_bd_args():
 
 
 # VARIABLES GLOBALES
-HOST, PUERTO, USUARIO, PASSWORD = ('', '', '', '')
+HOST, PUERTO, USUARIO, PASSWORD, DBNAME= ('', '', '', '', '')
 
 
 def change_frame(newframe):
@@ -162,10 +166,13 @@ def formato_expandido(txt):
 
 
 class BD():
+    """ Clase que se encarga de la conexión y comunicación con la Base 
+        de Datos """
 
     def __init__(self):
         try:
-            self.conn = pymssql.connect(HOST, USUARIO, PASSWORD, 'Matcher')
+            print("String connection: %s:%s/%s:%s" % (HOST, USUARIO, PASSWORD, DBNAME))
+            self.conn = pymssql.connect(HOST, USUARIO, PASSWORD, DBNAME)
         except pymssql.OperationalError as oe:
             root.withdraw()
             messagebox.showerror("Error de conexión a la Base de Datos", str(oe))
@@ -198,7 +205,8 @@ class BD():
         self.conn.commit()
 
     def get_all_msgs_text(self):
-        """ Retrieve a string with all text messages concatenated """
+        """ Devuelve una cadena de caracteres con todos los mensajes
+            concatenados """
         cursor = self.get_cursor()
         cursor.execute(
             """ SELECT texto_msg as text
@@ -208,7 +216,8 @@ class BD():
         return re.sub(r'(:\d+[A-Z]?:)',r'\n\1', txt)
 
     def get_msgs_text(self, text, fecha1, fecha2, tipo):
-        """ Retrieve a string with all text messages that match the given criteria """
+        """ Devuelve una cadena de caracteres con todos los mensajes que cumplen
+            con los criterios especificados en los argumentos """
         cursor = self.get_cursor()
         query = (""" SELECT texto_msg, tipo, io as text
                      FROM h_msgs
@@ -224,17 +233,10 @@ class BD():
 
         for row in cursor.fetchall():
             if row[0] is not None:
-                txt = re.sub(r'(:\d+[A-Z]?:)',r'\n\1', row[0])
-
-                tipo = row[1]
-                # A los mensajes 103, los imprimimos con formato parecido a prt
-                if tipo == '103': 
-                    txt = formato_expandido(txt)
-
+                txt = row[0]
                 acc = acc + "\n" + txt
                 num_results = num_results + 1
 
-        acc = re.sub(r'(\}\}?)',r'\1\n', acc)
         return (num_results, acc)
 
 
@@ -243,6 +245,8 @@ class BD():
 
 
 class Busqueda(Frame):
+    """ Se encarga de la busqueda, muestra e impresión de los mensajes
+        almacenados """
 
     def __init__(self, master):
         """ Inicialización del contenedor gráfico principal """
@@ -343,7 +347,11 @@ class Busqueda(Frame):
         self.instruction2 = Label(self.frame1, text="Tipo: ", width=8, anchor=E)
         self.instruction2.pack(side=LEFT, padx=5, pady=5)
 
-        self.listbox = OptionMenu(self.frame1, self.VarTipo, "", "103", "110", "199", "202", "740", "799", "999")
+        self.listbox = OptionMenu(self.frame1, self.VarTipo, "", "101","103","110","111",
+                                    "112","192","195","196","199","202","299","300","410",
+                                    "420","422","456","499","671","700","701","707","710",
+                                    "711","730","734","740","754","760","767","769","799",
+                                    "900","910","940","950","995","996","998","999")
         self.listbox.pack(side=LEFT, padx=(0, 5))
 
         self.search_button = Button(self.frame1, text='Buscar', width=10, font="Helvetica 10", command=buscar)
@@ -383,6 +391,8 @@ class Busqueda(Frame):
 
 
 class Carga(Frame):
+    """ Se encarga de la lectura de los archivos y carga(en BD)
+        de todos los mensajes que dichos archivos contienen """
 
     def __init__(self, master):
         """ Inicialización del contenedor gráfico principal """
@@ -438,11 +448,21 @@ class Carga(Frame):
         def cargar_arch(Var):
             """ Lectura y carga del archivo de datos """
 
-            def obtener_texto_msg(arr):
+            def obtener_texto_msg(arr, tipo):
                 """ Toma el arreglo de campos del msg y retorna un string con el texto del mensaje """
                 m = re.search('{1:.*-}', ''.join(arr))
                 if m:
-                    return m.group(0)
+                     
+                    txt = m.group(0)
+                    txt = re.sub(r'(:\d+[A-Z]?:)',r'\n\1', txt)
+                    
+
+                    # A los mensajes 103, los imprimimos con formato parecido a prt
+                    if tipo == '103': 
+                        txt = formato_expandido(txt)
+                    else:
+                        txt = re.sub(r'(\}\}?)',r'\1\n', txt)
+                    return txt
 
                 return None
 
@@ -453,16 +473,19 @@ class Carga(Frame):
 
                 with open(Var.get()) as f:
                     
-                    trans = [(str(tran[0]), str(tran[5]), datetime.strptime(tran[7], '%d/%m/%Y').date(), str(tran[8]), str(tran[10]), obtener_texto_msg(tran[25:]))
+                    trans = [(str(tran[0]), str(tran[5]), datetime.strptime(tran[7], '%d-%b-%y').date(), str(tran[8]), str(tran[10]), obtener_texto_msg(tran[25:], str(tran[8])))
                                     for tran in map(lambda l: l.split(";") ,[line for line in f.readlines()[1:] if line.strip() != ''])]
                     num_trans = len(trans) # conteo de transacciones
                     self.bd.save_trxs(trans)
-                    num_trans = 1280
                     varProcStatus.set('El archivo se ha procesado satisfactoriamente.')
                     self.proc_status.config(foreground='green')
-                    varNumTrans.set("%s transacciones cargadas." % num_trans)
+                    varNumTrans.set("%s mensajes cargados." % num_trans)
 
             except IndexError:
+                messagebox.showerror("Error", 'El archivo no cuenta con el formato apropiado.')
+                varProcStatus.set('')
+
+            except ValueError as ve:
                 messagebox.showerror("Error", 'El archivo no cuenta con el formato apropiado.')
                 varProcStatus.set('')
 
@@ -472,6 +495,10 @@ class Carga(Frame):
 
             except FileNotFoundError:
                 messagebox.showerror("Error", 'No se encuentra el archivo seleccionado.')
+                varProcStatus.set('')
+
+            except:
+                messagebox.showerror("Error", 'Ha ocurrido un error en el sistema. Por favor, contacte a BCG.')
                 varProcStatus.set('')
 
 
