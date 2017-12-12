@@ -11,7 +11,7 @@ import uuid
 
 
 # VARIABLES GLOBALES
-HOST, USUARIO, PASSWORD , NAMEDB = ('', '', '', '')
+HOST, USUARIO, PASSWORD , NAMEDB, BIC_CODE = ('', '', '', '', '')
 
 def change_frame(newframe):
 
@@ -74,8 +74,17 @@ class Inicio(Frame):
         self.instruction5 = Label(self.frame6,text="Nombre BD: ", width=10, anchor=E)
         self.instruction5.pack(side=LEFT, padx=5, pady=5, anchor=E)
 
-        self.nombre_bd = Entry(self.frame6, width=24, show="*")
+        self.nombre_bd = Entry(self.frame6, width=24)
         self.nombre_bd.pack(side=LEFT, padx=(0, 5))
+
+        self.frame7 = Frame(self,bd=1, relief=SUNKEN)
+        self.frame7.pack(fill=X)
+
+        self.instruction6 = Label(self.frame7,text="BIC: ", width=10, anchor=E)
+        self.instruction6.pack(side=LEFT, padx=5, pady=5, anchor=E)
+
+        self.bic = Entry(self.frame7, width=24)
+        self.bic.pack(side=LEFT, padx=(0, 5))
 
 
         self.frame5 = Frame(self)
@@ -100,6 +109,7 @@ class Inicio(Frame):
         global USUARIO 
         global PASSWORD
         global NAMEDB
+        global BIC_CODE
         #Nombre del archivo a crear
         raiz = os.path.dirname(os.path.abspath(__file__))
         archivo = raiz + "\Configuracion.txt"
@@ -107,10 +117,12 @@ class Inicio(Frame):
         obj1 = AES.new('BCGBCG9876543210', AES.MODE_CFB, 'BCGBCG0123456789')
         obj2 = AES.new('BCGBCG9876543210', AES.MODE_CFB, 'BCGBCG0123456789')
         obj3 = AES.new('BCGBCG9876543210', AES.MODE_CFB, 'BCGBCG0123456789')
+        obj4 = AES.new('BCGBCG9876543210', AES.MODE_CFB, 'BCGBCG0123456789')
         ciphertext_host = obj.encrypt(HOST)
         ciphertext_usuario = obj1.encrypt(USUARIO)
         ciphertext_password = obj2.encrypt(PASSWORD)
         ciphertext_bd = obj3.encrypt(NAMEDB)
+        ciphertext_bic = obj4.encrypt(BIC_CODE)
         #abrir archivo
         fo = open(archivo, 'w')
         fo.write( "$\n")
@@ -118,6 +130,7 @@ class Inicio(Frame):
         fo.write( "[U]"+str(base64.b64encode(ciphertext_usuario))+"\n")
         fo.write( "[C]"+str(base64.b64encode(ciphertext_password))+"\n")
         fo.write( "[B]"+str(base64.b64encode(ciphertext_bd))+"\n")
+        fo.write( "[I]"+str(base64.b64encode(ciphertext_bic))+"\n")
         fo.write( "@@")
         #cerrar archivo
         fo.close()
@@ -137,11 +150,13 @@ class Inicio(Frame):
         PASSWORD = self.password.get()
         global NAMEDB
         NAMEDB = self.nombre_bd.get()
+        global BIC_CODE
+        BIC_CODE = self.bic.get()
 
 
         conn = None
 
-        if HOST and USUARIO and PASSWORD:
+        if HOST and USUARIO and PASSWORD and BIC_CODE:
             try:
                 conn = pymssql.connect(HOST, USUARIO, PASSWORD, NAMEDB)
                 conn.close()

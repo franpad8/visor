@@ -22,6 +22,10 @@ import binascii
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
+# VARIABLES GLOBALES
+HOST, PUERTO, USUARIO, PASSWORD, DBNAME, BIC_CODE= ('', '', '', '', '', '')
+
+
 def get_bd_args():
     """ Extraer y decodificar los argumentos de conexión a la base de datos """
     global BASE_DIR
@@ -29,6 +33,7 @@ def get_bd_args():
     global USUARIO
     global PASSWORD
     global DBNAME
+    global BIC_CODE
 
     #ruta del archivo a leer
     ruta = BASE_DIR + "\Configuracion.txt"
@@ -47,6 +52,7 @@ def get_bd_args():
     obj2 = AES.new('BCGBCG9876543210', AES.MODE_CFB, 'BCGBCG0123456789')
     obj3 = AES.new('BCGBCG9876543210', AES.MODE_CFB, 'BCGBCG0123456789')
     obj4 = AES.new('BCGBCG9876543210', AES.MODE_CFB, 'BCGBCG0123456789')
+    obj5 = AES.new('BCGBCG9876543210', AES.MODE_CFB, 'BCGBCG0123456789')
 
     try:
         for line in lines[1:]:
@@ -74,15 +80,16 @@ def get_bd_args():
                 plaintext = obj4.decrypt(ciphertext)
                 DBNAME = str(plaintext)[2:][:-1]
 
+            elif opcion == "[I]":
+                plaintext = obj5.decrypt(ciphertext)
+                BIC_CODE = str(plaintext)[2:][:-1]
+
     except IndexError:
         root = Tk()
         root.withdraw()
         messagebox.showerror("Error", "Archivo de Configuración corrupto.")
         sys.exit()
 
-
-# VARIABLES GLOBALES
-HOST, PUERTO, USUARIO, PASSWORD, DBNAME= ('', '', '', '', '')
 
 
 def change_frame(newframe):
@@ -171,7 +178,6 @@ class BD():
 
     def __init__(self):
         try:
-            print("String connection: %s:%s/%s:%s" % (HOST, USUARIO, PASSWORD, DBNAME))
             self.conn = pymssql.connect(HOST, USUARIO, PASSWORD, DBNAME)
         except pymssql.OperationalError as oe:
             root.withdraw()
@@ -192,7 +198,8 @@ class BD():
                 fecha DATE,
                 tipo VARCHAR(3),
                 receiver VARCHAR(12),
-                texto_msg TEXT
+                texto_msg TEXT,
+                bic VARCHAR(11)
             )
         """)
         self.conn.commit()
@@ -200,7 +207,7 @@ class BD():
     def save_trxs(self, trans):
         """ Persist a list of trxs in DB """
         self.get_cursor().executemany(
-            "INSERT INTO h_msgs VALUES (%s, %s, %s, %s, %s, %s)",
+            "INSERT INTO h_msgs VALUES (%s, %s, %s, %s, %s, %s, %s)",
             trans)
         self.conn.commit()
 
@@ -210,7 +217,8 @@ class BD():
         cursor = self.get_cursor()
         cursor.execute(
             """ SELECT texto_msg as text
-                FROM h_msgs """)
+                FROM h_msgs 
+                WHERE bic LIKE '%s'""") % (BIC_CODE)
         txt = '\n'.join([row[0] for row in cursor.fetchall() if row[0] is not None])
         txt = re.sub('(}}?)','\1\n', txt)
         return re.sub(r'(:\d+[A-Z]?:)',r'\n\1', txt)
@@ -224,7 +232,8 @@ class BD():
                      WHERE texto_msg COLLATE Latin1_General_CI_AS LIKE '%%%s%%'
                      AND fecha BETWEEN %s AND %s
                      AND tipo LIKE '%%%s%%'
-                 """) % (text, fecha1, fecha2, tipo)
+                     AND bic LIKE '%s'
+                 """) % (text, fecha1, fecha2, tipo, BIC_CODE)
         print(query)
         cursor.execute(query)
         acc = ''
@@ -473,7 +482,7 @@ class Carga(Frame):
 
                 with open(Var.get()) as f:
                     
-                    trans = [(str(tran[0]), str(tran[5]), datetime.strptime(tran[7], '%d-%b-%y').date(), str(tran[8]), str(tran[10]), obtener_texto_msg(tran[25:], str(tran[8])))
+                    trans = [(str(tran[0]), str(tran[5]), datetime.strptime(tran[7], '%d-%b-%y').date(), str(tran[8]), str(tran[10]), obtener_texto_msg(tran[25:], str(tran[8])), str(BIC_CODE))
                                     for tran in map(lambda l: l.split(";") ,[line for line in f.readlines()[1:] if line.strip() != ''])]
                     num_trans = len(trans) # conteo de transacciones
                     self.bd.save_trxs(trans)
@@ -481,7 +490,7 @@ class Carga(Frame):
                     self.proc_status.config(foreground='green')
                     varNumTrans.set("%s mensajes cargados." % num_trans)
 
-            except IndexError:
+            except IndexError as idx:
                 messagebox.showerror("Error", 'El archivo no cuenta con el formato apropiado.')
                 varProcStatus.set('')
 
